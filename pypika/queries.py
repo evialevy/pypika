@@ -109,6 +109,10 @@ class Table(Selectable):
         self._table_name = name
         self._schema = self._init_schema(schema)
 
+    @property
+    def name(self):
+        return copy(self._table_name)
+
     def get_sql(self, quote_char=None, **kwargs):
         # FIXME escape
         table_sql = format_quotes(self._table_name, quote_char)
@@ -596,15 +600,15 @@ class QueryBuilder(Selectable, Term):
             self._orderbys.append((field, kwargs.get('order')))
 
     @builder
-    def join(self, item, how=JoinType.inner):
+    def join(self, item, how=JoinType.inner, lateral=False):
         if isinstance(item, Table):
-            return Joiner(self, item, how, type_label='table')
+            return Joiner(self, item, how, type_label='table', lateral=lateral)
 
         elif isinstance(item, QueryBuilder):
-            return Joiner(self, item, how, type_label='subquery')
+            return Joiner(self, item, how, type_label='subquery', lateral=lateral)
 
         elif isinstance(item, AliasedQuery):
-            return Joiner(self, item, how, type_label='table')
+            return Joiner(self, item, how, type_label='table', lateral=lateral)
 
         raise ValueError("Cannot join on type '%s'" % type(item))
 
@@ -983,11 +987,12 @@ class QueryBuilder(Selectable, Term):
 
 
 class Joiner(object):
-    def __init__(self, query, item, how, type_label):
+    def __init__(self, query, item, how, type_label, lateral=False):
         self.query = query
         self.item = item
         self.how = how
         self.type_label = type_label
+        self.lateral = lateral
 
     def on(self, criterion):
         if criterion is None:
@@ -1020,23 +1025,24 @@ class Joiner(object):
 
     def cross(self):
         """Return cross join"""
-        self.query.do_join(Join(self.item, JoinType.cross))
+        self.query.do_join(Join(self.item, JoinType.cross, self.lateral))
 
         return self.query
 
 
 class Join(object):
-    def __init__(self, item, how):
+    def __init__(self, item, how, lateral=False):
         self.item = item
         self.how = how
+        self.lateral = lateral
 
     def get_sql(self, **kwargs):
-        sql = 'JOIN {table}'.format(
-              table=self.item.get_sql(subquery=True, with_alias=True, **kwargs),
+        sql = 'JOIN {lateral} {table}'.format(
+            table=self.item.get_sql(subquery=True, with_alias=True, **kwargs),
+            lateral="LATERAL" if self.lateral else "",
         )
-
         if self.how.value:
-            return '{type} {join}'.format(join=sql, type=self.how.value)
+           sql = '{type} {join}'.format(join=sql, type=self.how.value)
         return sql
 
     def validate(self, _from, _joins):

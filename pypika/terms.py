@@ -341,10 +341,11 @@ class EmptyCriterion:
 
 
 class Field(Criterion):
-    def __init__(self, name, alias=None, table=None):
+    def __init__(self, name, alias=None, table=None, cast=None):
         super(Field, self).__init__(alias)
         self.name = name
         self.table = table
+        self.cast = cast
 
     def fields(self):
         return [self]
@@ -368,10 +369,11 @@ class Field(Criterion):
     def get_sql(self, with_alias=False, with_namespace=False, quote_char=None, **kwargs):
         # Need to add namespace if the table has an alias
         if self.table and (with_namespace or self.table.alias):
-            field_sql = "{quote}{namespace}{quote}.{quote}{name}{quote}".format(
+            field_sql = "{quote}{namespace}{quote}.{quote}{name}{quote}{cast}".format(
                 namespace=self.table.alias or self.table._table_name,
                 name=self.name,
                 quote=quote_char or '',
+                cast='' if not self.cast else '::{cast}'.format(cast=self.cast)
             )
         else:
             field_sql = "{quote}{name}{quote}".format(
