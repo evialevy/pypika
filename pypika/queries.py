@@ -364,6 +364,7 @@ class QueryBuilder(Selectable, Term):
         self._insert_table = None
         self._update_table = None
         self._delete_from = False
+        self._cascade = False
 
         self._with = []
         self._selects = []
@@ -611,6 +612,12 @@ class QueryBuilder(Selectable, Term):
             return Joiner(self, item, how, type_label='table', lateral=lateral)
 
         raise ValueError("Cannot join on type '%s'" % type(item))
+
+    @builder
+    def cascade(self):
+        if not self._delete_from:
+            raise QueryException('Cascade applies only to delete query')
+        self._cascade = True
 
     @builder
     def limit(self, limit):
@@ -903,10 +910,10 @@ class QueryBuilder(Selectable, Term):
         )
 
     def _from_sql(self, with_namespace=False, **kwargs):
-        return ' FROM {selectable}'.format(selectable=','.join(
+        return ' FROM {selectable}{cascade}'.format(selectable=','.join(
               clause.get_sql(subquery=True, with_alias=True, **kwargs)
               for clause in self._from
-        ))
+        ), cascade=' CASCADE' if self._cascade else '')
 
     def _prewhere_sql(self, quote_char=None, **kwargs):
         return ' PREWHERE {prewhere}'.format(
